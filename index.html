@@ -645,8 +645,8 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuration setup
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'alfaizeen-academy';
+        // Configuration setup - Uses global variables or fallback for local environments
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'alfaizeen-academy-app';
         const firebaseConfig = typeof __firebase_config !== 'undefined' 
             ? JSON.parse(__firebase_config) 
             : {
@@ -658,14 +658,14 @@
                 appId: "1:1234567890:web:demo123"
             };
 
-        // Initialize Firebase
+        // Initialize Firebase Application
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
         let currentUser = null;
 
-        // Auth handling
+        // Secure Auth handling sequence (Rule 3)
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
         } else {
@@ -675,16 +675,18 @@
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
-                console.log("Firebase Auth Active:", user.uid);
+                console.log("Firebase Auth Authenticated:", user.uid);
                 setupRealtimeSync();
             }
         });
 
-        // Realtime Data Sync via Mandatory Path Rules
+        // Realtime Data Sync following strict public path rules (Rule 1 & Rule 2)
         function setupRealtimeSync() {
             if (!currentUser) return;
+            // Public collection path rule: /artifacts/{appId}/public/data/{collectionName}
             const studentsCol = collection(db, 'artifacts', appId, 'public', 'data', 'students');
             
+            // Listen to live snapshot changes
             onSnapshot(studentsCol, (snapshot) => {
                 const cloudStudents = [];
                 snapshot.forEach(doc => {
@@ -695,11 +697,11 @@
                     renderStudents();
                 }
             }, (error) => {
-                console.warn("Firestore sync fallback to local session state:", error);
+                console.warn("Firestore realtime sync notice:", error);
             });
         }
 
-        // Export helper to global scope for saving students to Cloud
+        // Global function to push student registration to Firestore Cloud
         window.saveStudentToCloud = async function(studentData) {
             if (!currentUser) return;
             try {
@@ -708,9 +710,9 @@
                     ...studentData,
                     createdAt: new Date().toISOString()
                 });
-                console.log("Student saved to Firebase Cloud!");
+                console.log("Student saved to Firebase Cloud successfully!");
             } catch (e) {
-                console.error("Error saving student to Firebase:", e);
+                console.error("Error saving student to Firebase Cloud:", e);
             }
         };
     </script>
