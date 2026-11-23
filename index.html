@@ -639,6 +639,82 @@
         </div>
     </div>
 
+    <!-- FIREBASE INTEGRATION MODULE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuration setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'alfaizeen-academy';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyDemoKeyForAlfaizeenAcademy",
+                authDomain: "alfaizeen-app.firebaseapp.com",
+                projectId: "alfaizeen-app",
+                storageBucket: "alfaizeen-app.appspot.com",
+                messagingSenderId: "1234567890",
+                appId: "1:1234567890:web:demo123"
+            };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+
+        // Auth handling
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            signInWithCustomToken(auth, __initial_auth_token).catch(() => signInAnonymously(auth));
+        } else {
+            signInAnonymously(auth).catch((err) => console.log("Auth notice:", err));
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                console.log("Firebase Auth Active:", user.uid);
+                setupRealtimeSync();
+            }
+        });
+
+        // Realtime Data Sync via Mandatory Path Rules
+        function setupRealtimeSync() {
+            if (!currentUser) return;
+            const studentsCol = collection(db, 'artifacts', appId, 'public', 'data', 'students');
+            
+            onSnapshot(studentsCol, (snapshot) => {
+                const cloudStudents = [];
+                snapshot.forEach(doc => {
+                    cloudStudents.push({ id: doc.id, ...doc.data() });
+                });
+                if (cloudStudents.length > 0) {
+                    state.students = cloudStudents;
+                    renderStudents();
+                }
+            }, (error) => {
+                console.warn("Firestore sync fallback to local session state:", error);
+            });
+        }
+
+        // Export helper to global scope for saving students to Cloud
+        window.saveStudentToCloud = async function(studentData) {
+            if (!currentUser) return;
+            try {
+                const studentsCol = collection(db, 'artifacts', appId, 'public', 'data', 'students');
+                await addDoc(studentsCol, {
+                    ...studentData,
+                    createdAt: new Date().toISOString()
+                });
+                console.log("Student saved to Firebase Cloud!");
+            } catch (e) {
+                console.error("Error saving student to Firebase:", e);
+            }
+        };
+    </script>
+
     <!-- CORE JAVASCRIPT LOGIC -->
     <script>
         const state = {
@@ -777,8 +853,14 @@
             const pkg = document.getElementById('stPackage').value;
             const wa = document.getElementById('stWhatsapp').value;
 
-            state.students.unshift({ name, city, pkg, wa, status: 'نشط' });
+            const newStudent = { name, city, pkg, wa, status: 'نشط' };
+            state.students.unshift(newStudent);
             renderStudents();
+
+            if (typeof window.saveStudentToCloud === 'function') {
+                window.saveStudentToCloud(newStudent);
+            }
+
             sendWelcomeWhatsapp(name, wa);
         }
 
@@ -786,9 +868,15 @@
             const card = document.getElementById(cardId);
             if (card) card.remove();
 
-            state.students.unshift({ name, city, pkg, wa, status: 'نشط' });
+            const newStudent = { name, city, pkg, wa, email, status: 'نشط' };
+            state.students.unshift(newStudent);
             renderStudents();
             closeModal('pendingSubmissionsModal');
+
+            if (typeof window.saveStudentToCloud === 'function') {
+                window.saveStudentToCloud(newStudent);
+            }
+
             sendWelcomeWhatsapp(name, wa);
         }
 
